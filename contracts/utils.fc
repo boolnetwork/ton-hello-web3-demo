@@ -1,0 +1,195 @@
+#include "imports/stdlib.fc";
+
+;; refer to https://docs.ton.org/develop/smart-contracts/messages#message-modes
+const int SEND_MODE_REGULAR = 0;
+const int SEND_MODE_PAY_FEES_SEPARETELY = 1;
+const int SEND_MODE_IGNORE_ERRORS = 2;
+const int SEND_MODE_DESTROY = 32;
+const int SEND_MODE_CARRY_ALL_REMAINING_MESSAGE_VALUE = 64;
+const int SEND_MODE_CARRY_ALL_BALANCE = 128;
+
+const int BOUNCEABLE = 0x18;
+const int NON_BOUNCEABLE = 0x10;
+
+const int DEFAULT_FEE = 100000000;
+const GAS_CONSUMPTION = 10000000; ;; 0.01 TON
+const NOTIFY_ROUTER_EMIT_EVENT_CONSUMPTION = 11220000;
+const NATIVE_TRANSFER_CONSUMPTION = 1414000;
+const JETTON_TRANSFER_FEE_CONSUMPTION = 1973000;
+const SEND_MESSAGE_TO_MESSENGER_FEE_CONSUMPTION = 12148000;
+const SEND_DELIVER_STATUS_FEE_CONSUMPTION = 13853000;
+const SEND_MSG_RESULT_TO_CONSUMER_FEE_CONSUMPTION = 1707000;
+
+const FEE_RATIO_CHANGE_LOG_CONSUMPTION = 7902000; ;; 0.007 TON
+const POOL_LP_CHANGE_LOG_CONSUMPTION = 9299000; ;; 0.009 TON
+const SWAPPED_OR_REMOVE_REMOTE_LP_LOG_CONSUMPTION = 8385000;
+;; const REMOVE_REMOTE_LP_LOG_CONSUMPTION = 10000000;
+const POOL_FEE_COLLECTED_LOG_CONSUMPTION = 10000000;
+
+const MESSENGE_SEND_LOG_CONSUMPTION = 17949000;
+const MESSENGE_RECEIVE_LOG_CONSUMPTION = 17510001;
+const MESSENGE_DELIVER_FAILED_LOG_CONSUMPTION = 11079684;
+
+const WORKCHAIN = 0;
+
+const int to_swap_in = 1;
+const int to_remove_remote_liquidity = 2;
+
+;; event topic
+;; messenger
+const int message_sent_event = 1;
+const int message_receive_event = 2;
+const int anchor_created = 3;
+;; router
+const int pool_created = 4;
+const int send_result_from_messenger = 5;
+const int swapped = 6;
+const int pool_liquidity_modified = 7;
+const int pool_fee_ratio_updated = 8;
+const int remove_remote_liquidity = 9;
+const int pool_fee_collected = 10;
+
+;; messenger op
+const messenger::enable_global_path = "op::enable_global_path"c; ;; create an opcode from string using the "c" prefix, this results in 0x2dad39eb opcode in this case
+const messenger::register_anchor = "op::register_anchor"c; ;; create an opcode from string using the "c" prefix, this results in 0x3634b0b4 opcode in this case
+const messenger::withdraw_fee = "op::withdraw_fee"c; ;; create an opcode from string using the "c" prefix, this results in 0x27b385ca opcode in this case
+const messenger::set_fee_admin = "op::set_fee_admin"c; ;; create an opcode from string using the "c" prefix, this results in 0x1d84e68b opcode in this case
+const messenger::set_fee_config = "op::set_fee_config"c; ;; create an opcode from string using the "c" prefix, this results in 0x17132b36 opcode in this case
+const messenger::set_fee_receiver = "op::set_fee_receiver"c; ;; create an opcode from string using the "c" prefix, this results in 0x30432c99 opcode in this case
+const messenger::send_message = "op::send_message"c; ;; create an opcode from string using the "c" prefix, this results in 0x2aaed1c opcode in this case
+const messenger::receive_message = "op::receive_message"c; ;; create an opcode from string using the "c" prefix, this results in 0xf1876ad7 opcode in this case
+const messenger::handle_message_result_from_consumer = "op::handle_message_result_from_consumer"c; ;; create an opcode from string using the "c" prefix, this results in 0xf2990f99 opcode in this case
+
+;; anchor op
+const anchor::update_consumer = "op::update_consumer"c; ;; create an opcode from string using the "c" prefix, this results in 0x56a815a5 opcode in this case
+const anchor::enable_path = "op::enable_path"c; ;; create an opcode from string using the "c" prefix, this results in 0x5b35eb59 opcode in this case
+
+;; consumer op
+const consumer::receive_message_from_messenger = "op::receive_message_from_messenger"c; ;; create an opcode from string using the "c" prefix, this results in 0x290b4421 opcode in this case
+const consumer::send_message_result_from_messenger = "op::send_message_result_from_messenger"c; ;; create an opcode from string using the "c" prefix, this results in 0xdac333ce opcode in this case
+const consumer::register_anchor = "op::register_anchor"c; ;; create an opcode from string using the "c" prefix, this results in 0x3634b0b4 opcode in this case
+
+;; router op
+const router::register_pool = "op::register_pool"c; ;; create an opcode from string using the "c" prefix, this results in 0x5259b33 opcode in this case
+const router::emit_event = "router::emit_event"c; ;; create an opcode from string using the "c" prefix, this results in 0x9ce7c11c opcode in this case
+
+;; pool op
+const pool::swap_in = "op::swap_in"c; ;; create an opcode from string using the "c" prefix, this results in 0x8cefafe1 opcode in this case
+const pool::increase_liquidity = "op::increase_liquidity"c; ;; create an opcode from string using the "c" prefix, this results in 0xe8b36a32 opcode in this case
+const pool::decrease_liquidity = "pool::decrease_liquidity"c; ;; create an opcode from string using the "c" prefix, this results in 0xfdb60f0 opcode in this case
+const pool::decrease_liquidity_remote = "pool::decrease_liquidity_remote"c; ;; create an opcode from string using the "c" prefix, this results in 0x6949f3ac opcode in this case
+const pool::set_receiver = "pool::set_receiver"c; ;; create an opcode from string using the "c" prefix, this results in 0x9737bd86 opcode in this case
+const pool::set_fee_ratio = "pool::set_fee_ratio"c; ;; create an opcode from string using the "c" prefix, this results in 0x52724b08 opcode in this case
+const pool::collect_lp_fee = "pool::collect_lp_fee"c; ;; create an opcode from string using the "c" prefix, this results in 0xccc2c51b opcode in this case
+const pool::register_swap_consumer = "pool::register_swap_consumer"c; ;; create an opcode from string using the "c" prefix, this results in 0xc00073a9 opcode in this case
+const pool::call_back_from_swap_consumer = "pool::call_back_from_swap_consumer"c; ;; create an opcode from string using the "c" prefix, this results in 0x2087c980 opcode in this case
+const pool::update_jetton_wallet_addr = "pool::update_jetton_wallet_addr"c; ;; create an opcode from string using the "c" prefix, this results in 0xd5f69fda opcode in this case
+const pool::update_anchor = "pool::update_anchor"c; ;; create an opcode from string using the "c" prefix, this results in 0x21ccad0c opcode in this case
+
+;; jetton wallet op
+const jetton_wallet::internal_transfer = 0x178d4519;
+
+;; bool swap consumer op
+const bool_swap::update_approved_address = "bool_swap::update_approved_address"c; ;; create an opcode from string using the "c" prefix, this results in 0x29eb0585 opcode in this case
+const bool_swap::ton_transfer_notification = "bool_swap::ton_transfer_notification"c; ;; create an opcode from string using the "c" prefix, this results in 0x47ca5d6b opcode in this case
+const bool_swap::update_jetton_wallet_addr = "bool_swap::update_jetton_wallet_addr"c; ;; create an opcode from string using the "c" prefix, this results in 0x2b66a6d2 opcode in this case
+int op::excesses() asm "0xd53276db PUSHINT";
+int op::transfer_notification() asm "0x7362d09c PUSHINT";
+() emit_log (int topic, builder data) impure inline {
+    ;; 1023 - (4+2+9+256+64+32+2) = 654 bit free
+
+    var msg = begin_cell()
+            .store_uint (12, 4)         ;; ext_out_msg_info$11 src:MsgAddressInt ()
+            .store_uint (1, 2)          ;; addr_extern$01
+            .store_uint (256, 9)        ;; len:(## 9)
+            .store_uint(topic, 256); ;; external_address:(bits len)
+
+    ;; cell up to 1024 bits and 4 references
+    if (data.builder_bits() > 1023 - (4 + 2 + 9 + 256 + 64 + 32 + 2) ) {
+        msg = msg.store_uint(1, 64 + 32 + 2) ;; created_lt, created_at, init:Maybe, body:Either
+                .store_ref(begin_cell().store_builder(data).end_cell());
+    } else {
+        msg = msg.store_uint(0, 64 + 32 + 2) ;; created_lt, created_at, init:Maybe, body:Either
+                .store_builder(data);
+    }
+
+    send_raw_message(msg.end_cell(), SEND_MODE_REGULAR);
+}
+
+(slice) get_serialized_address(int workchain, int address) inline {
+    return (begin_cell()
+        .store_uint(4, 3)
+        .store_uint(workchain, 8)
+        .store_uint(address, 256)
+    ).end_cell().begin_parse();
+}
+
+() send_message_with_mode(slice to, int amount, cell body, int mode) impure {
+    cell msg = begin_cell()
+        .store_uint(0x18, 6)
+        .store_slice(to)
+        .store_coins(amount)
+        .store_uint(1, 107)
+        .store_ref(body)
+    .end_cell();
+    send_raw_message(msg, mode);
+}
+
+() send_message_nobounce(int amount, slice to, cell body, int mode) impure {
+    cell msg = begin_cell()
+        .store_uint(0x10, 6)
+        .store_slice(to)
+        .store_coins(amount)
+        .store_uint(1, 107)
+        .store_ref(body)
+    .end_cell();
+    send_raw_message(msg, mode);
+}
+
+() send_message_with_stateinit(int amount, slice to, cell state_init, cell body, int mode) impure {
+    cell msg = begin_cell()
+        .store_uint(0x18, 6)
+        .store_slice(to)
+        .store_coins(amount)
+        .store_uint(7, 108)
+        .store_ref(state_init)
+        .store_ref(body)
+    .end_cell();
+    send_raw_message(msg, mode);
+}
+
+(builder) create_jetton_transfer_body(int query_id, int fwd_amount, int jetton_amount, slice to, slice response_address) inline {
+    return begin_cell()
+        .store_uint(0xf8a7ea5, 32)
+        .store_uint(query_id, 64)
+        .store_coins(jetton_amount)
+        .store_slice(to) ;; to_owner_address
+        .store_slice(response_address)
+        .store_uint(0, 1)
+        .store_coins(fwd_amount) ;; forward_ton_amount
+        .store_uint(0, 1);
+}
+
+(builder) create_jetton_transfer_body_with_payload(int query_id, int fwd_amount, int jetton_amount, slice to, cell payload, slice response_address) inline {
+    return begin_cell()
+        .store_uint(0xf8a7ea5, 32)
+        .store_uint(query_id, 64)
+        .store_coins(jetton_amount)
+        .store_slice(to) ;; to_owner_address
+        .store_slice(response_address)
+        .store_uint(0, 1)
+        .store_coins(fwd_amount) ;; forward_ton_amount
+        .store_uint(1, 1) ;; true
+        .store_ref(payload);
+}
+
+() return_excesses_value(slice response_address, int amount, int mode) impure {
+    var msg = begin_cell()
+        .store_uint(0x10, 6) ;; nobounce
+        .store_slice(response_address)
+        .store_coins(amount)
+        .store_uint(0, 1 + 4 + 4 + 64 + 32 + 1 + 1)
+        .store_uint(op::excesses(), 32)
+        .store_uint(0, 64); ;; query_id
+    send_raw_message(msg.end_cell(), mode);
+}

@@ -1,0 +1,248 @@
+#pragma version >=0.2.0;
+
+#include "./imports/stdlib.fc";
+#include "./utils.fc";
+
+const int PURE_MESSAGE = 68038435685714835404746397473075527471200685952179818348883312067161876423550;
+
+const error:not_existed = "error::not_existed"c; ;; 0x83169731
+
+const event:anchor_created = "anchor_created(int, cell)"c; ;; 3469c0b6
+
+const op::send_greeting = "op::send_greeting"c; ;; 0x92ec8394
+
+;; storage variables
+
+global slice ctx_messenger;
+global int ctx_anchor;
+global int ctx_counter;
+global cell ctx_map; ;; Map<int, message>;
+
+() call_messenger_to_send_message(slice messenger, cell cross_data, int amount, int mode, int purpose, slice from_user) impure inline {
+    cell call_body = begin_cell()
+        .store_uint(messenger::send_message, 32)
+        .store_ref(cross_data)
+        .store_uint(purpose, 8)
+        .store_slice(from_user)
+        .end_cell();
+    send_message_with_mode(messenger, amount, call_body, mode);
+}
+
+() call_back_delivered_status_to_messenger(slice messenger, cell cross_data, int exit_code, int mode, int amount, slice deliver) impure {
+    cell data = begin_cell()
+            .store_ref(cross_data)
+            .store_uint(exit_code, 32)
+            .store_slice(deliver)
+            .end_cell();
+
+    cell call_body = begin_cell()
+        .store_uint(messenger::handle_message_result_from_consumer, 32)
+        .store_ref(data)
+        .end_cell();
+
+    send_message_with_mode(messenger, amount, call_body, mode);
+}
+
+cell pack_send_greeting(int dst_chain_id, cell message) inline {
+    return begin_cell()
+            .store_uint(dst_chain_id, 32)
+            .store_ref(message)
+            .end_cell();
+}
+
+(int, cell) unpack_send_greeting(slice ds) inline {
+    ;;var ds = data.begin_parse();
+    int dst_chain_id = ds~load_uint(32);
+    cell message = ds~load_ref();
+    ;;ds.end_parse();
+    return (dst_chain_id, message);
+}
+
+cell pack_swap_payload(int tag, int amount, int address, cell payload) inline {
+    return begin_cell()
+    .store_uint(tag, 256)
+    .store_uint(amount, 256)
+    .store_uint(address, 256)
+    .store_ref(payload)
+    .end_cell();
+}
+
+cell align_data(cell message) inline {
+    slice mg = message.begin_parse();
+    int bits = mg.slice_bits();
+    int leftover_bits = 256 - bits;
+    return begin_cell()
+    .store_slice(mg)
+    .store_uint(0, leftover_bits)
+    .end_cell();
+}
+
+cell pack_eth_payload(cell message, int sender) inline {
+    return begin_cell()
+    .store_uint(0x40, 256)
+    .store_ref(begin_cell().store_uint(sender, 256).end_cell())
+    .store_ref(begin_cell().store_uint(message.begin_parse().slice_bits() / 8, 256).end_cell())
+    .store_ref(align_data(message))
+    .end_cell();
+}
+
+(cell, int) unpack_eth_payload(cell data) inline {
+    var ds = data.begin_parse();
+    int _offset = ds~load_uint(256);
+    cell c_sender = ds~load_ref();
+    cell c_len = ds~load_ref();
+    cell c_message = ds~load_ref();
+    ds.end_parse();
+
+    var c_len_ds = c_len.begin_parse();
+    int len = c_len_ds~load_uint(256);
+    int bits = len * 8;
+    var c_message_ds = c_message.begin_parse();
+    slice msg = c_message_ds~load_bits(bits);
+
+    cell message = begin_cell().store_slice(msg).end_cell();
+    slice c_sender_ds = c_sender.begin_parse();
+    int address = c_sender_ds~load_int(256);
+    return (message, address);
+}
+
+;; load_data populates storage variables using stored data
+() load_data() impure {
+    var ds = get_data().begin_parse();
+
+    ctx_messenger = ds~load_msg_addr();
+    ctx_anchor = ds~load_uint(256);
+    ctx_counter = ds~load_uint(32);
+    ctx_map = ds~load_dict();
+
+    ds.end_parse();
+}
+
+;; save_data stores storage variables as a cell into persistent storage
+() save_data() impure {
+    set_data(
+        begin_cell()
+            .store_slice(ctx_messenger)
+            .store_uint(ctx_anchor, 256)
+            .store_uint(ctx_counter, 32)
+            .store_dict(ctx_map)
+            .end_cell()
+    );
+}
+
+;; recv_internal is the main function of the contract and is called when it receives a message from other contracts
+() recv_internal(int my_balance, int msg_value, cell in_msg_full, slice in_msg_body) impure {
+    if (in_msg_body.slice_empty?()) { ;; ignore all empty messages
+        return ();
+    }
+
+    slice cs = in_msg_full.begin_parse();
+    int flags = cs~load_uint(4);
+    if (flags & 1) { ;; ignore all bounced messages
+        return ();
+    }
+    slice sender_address = cs~load_msg_addr();
+
+    load_data(); ;; here we populate the storage variables
+
+    int op = in_msg_body~load_uint(32); ;; by convention, the first 32 bits of incoming message is the op
+    int query_id = in_msg_body~load_uint(64); ;; also by convention, the next 64 bits contain the "query id", although this is not always the case
+
+    if (op == op::send_greeting) {
+        (int dst_chain_id, cell message) = unpack_send_greeting(in_msg_body);
+        slice my_address_a = my_address();
+        (int workchain, int addr) = parse_std_addr(my_address_a);
+        cell payload = pack_eth_payload(message, addr);
+
+        payload~dump();
+        ;; call messenger
+        cell cross_data = begin_cell()
+        .store_slice(sender_address)
+        .store_uint(PURE_MESSAGE, 256) ;; cross_type
+        .store_ref(begin_cell().end_cell()) ;; extra_feed
+        .store_uint(dst_chain_id, 32)
+        .store_ref(payload)
+        .store_uint(ctx_anchor, 256)
+        .end_cell();
+
+        call_messenger_to_send_message(ctx_messenger, cross_data, 0, SEND_MODE_CARRY_ALL_REMAINING_MESSAGE_VALUE, 0, sender_address);
+
+        ctx_counter += 1;
+        ctx_map~udict_set_ref(32, ctx_counter, payload);
+        save_data();
+        return ();
+    }
+
+    if (op == consumer::receive_message_from_messenger) {
+        int uid = in_msg_body~load_uint(256);
+        cell cross_type = in_msg_body~load_ref();
+        int src_anchor = in_msg_body~load_uint(256);
+        int dst_anchor = in_msg_body~load_uint(256);
+        cell extra_feed = in_msg_body~load_ref();
+        cell payload = in_msg_body~load_ref();
+        cell deliver = in_msg_body~load_ref();
+        in_msg_body.end_parse();
+        slice deliver_cs = deliver.begin_parse();
+        slice deliver_addr = deliver_cs~load_msg_addr();
+
+        (cell message, int sender) = unpack_eth_payload(payload);
+        cell cross_data = begin_cell()
+            .store_uint(uid, 256)
+            .store_ref(cross_type)
+            .store_uint(src_anchor, 256)
+            .store_uint(dst_anchor, 256)
+            .store_ref(extra_feed)
+            .end_cell();
+
+        message~dump();
+        sender~dump();
+        ;; call back to messenger if sender_not_messenger
+        ifnot (sender_address.equal_slices(ctx_messenger)) {
+            call_back_delivered_status_to_messenger(sender_address, cross_data, 777, SEND_MODE_CARRY_ALL_REMAINING_MESSAGE_VALUE, 0, deliver_addr);
+            return ();
+        }
+
+        ;;emit GreetingReceived(txUniqueIdentification);
+        emit_log(
+            event:anchor_created, 
+            begin_cell()
+                .store_uint(sender, 256)
+                .store_ref(message)
+        );
+        call_back_delivered_status_to_messenger(sender_address, cross_data, 0, SEND_MODE_CARRY_ALL_REMAINING_MESSAGE_VALUE, 0, deliver_addr);
+        return ();
+    }
+
+    if (op == consumer::send_message_result_from_messenger) {
+        cell payload = in_msg_body~load_ref();
+        int dst_chain = in_msg_body~load_uint(32);
+        int indicator = in_msg_body~load_uint(8);
+        slice refund_address = in_msg_body~load_msg_addr();
+        slice from_user = in_msg_body~load_msg_addr();
+        int exit_code = in_msg_body~load_uint(32);
+        payload~dump();
+        dst_chain~dump();
+        exit_code~dump();
+        return ();
+    }
+
+    throw(0xffff); ;; if the message contains an op that is not known to this contract, we throw
+}
+
+slice get_messenger() method_id {
+    load_data();
+    return ctx_messenger;
+}
+
+int get_anchor() method_id {
+    load_data();
+    return ctx_anchor;
+}
+
+cell get_map(int index) method_id {
+    load_data();
+    (cell payload, var found?) = ctx_map.udict_get_ref?(32, index);
+    throw_unless(error:not_existed, found?);
+    return payload;
+} 
+

@@ -1,0 +1,6 @@
+node_modules
+temp
+build
+tmp
+ton-fc-demos
+.env
