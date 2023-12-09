@@ -64,7 +64,8 @@ npm run sent
 
 A complete cross-chain process relies on inter-calls between the BOOL `Messenger` contract and the consumer contract on the TON chain, the consumer contract has at least two send and receive operations.
 
-- **Send class operation**：
+#### **Send class operation**
+
 After the sending operation of the consumer contract completes the user-defined logic, the `Messenger` contract must be notified according to the specification, otherwise the BOOL system will not identify the transaction as a legitimate cross-chain transaction.
 
 The notification data to `Messenger`` must be assembled as follows:
@@ -80,14 +81,15 @@ begin_cell()
 .end_cell();
 ```
 
-**sender_address**：The sender's address
-**PURE_MESSAGE**： A fixed constant type
-**extra_feed**：The additional data needed needs to be known by the EVM chain
-**dst_chain_id**： Destination EVM chain id
-**payload**：Execution data sent to the EVM chain
-**ctx_anchor**：The anchor address of the current chain
+- **sender_address**：The sender's address  
+- **PURE_MESSAGE**： A fixed constant type  
+- **extra_feed**：The additional data needed needs to be known by the EVM chain  
+- **dst_chain_id**： Destination EVM chain id  
+- **payload**：Execution data sent to the EVM chain  
+- **ctx_anchor**：The anchor address of the current chain  
 
-- **Receive class operations**:
+### **Receive class operations**
+
 The internal function call of the consumer contract must implement the `consumer::receive_message_from_messenger` operation to receive the internal Message of cross-chain transactions initiated from the `Messenger` contract. Alternatively, you can optionally implement the `consumer::send_message_result_from_messenger` operation to receive an internal Message from the `Messenger` contract that completes a cross-chain transaction.
 
 Note: Users need to interpret internal messages initiated by `Messenger` according to standard data structure definitions. The consumer contract must use `call_back_delivered_status_to_messenger` to callback the Messenger result after receiving an internal Message from `Messenger`, otherwise the BOOL system will not recognize the transaction as a legitimate cross-chain transaction.
