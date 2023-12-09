@@ -41,10 +41,11 @@ Building a set of TON-EVM heterogeneous chain bridge can be divided into the fol
 For developers who are new to BOOL cross-chain, it is recommended to refer to [advanced solidity tutorials](https://github.com/boolnetwork/advanced-solidity-tutorials), which contains detailed instructions on the first and second aspects. We used the HelloWeb3 example.
 
 When you have completed the above configuration, the next steps are required on the TON chain:
-1、Deploy your contract, here we use the HelloWeb3 example.
-2、Update the consumer address of the Anchor object in the Messenger contract.
-3、Update the Anchor address of the EVM target chain of the anchor object in the Messenger contract.
-4、Sends a "Hello World" message to the EVM target chain.
+
+1. Deploy your contract, here we use the HelloWeb3 example.
+2. Update the consumer address of the Anchor object in the Messenger contract.
+3. Update the Anchor address of the EVM target chain of the anchor object in the Messenger contract.
+4. Sends a "Hello World" message to the EVM target chain.
 
 
 The execution script of Steps 1 to 3:
@@ -102,6 +103,8 @@ TON's HelloWeb3 Key links is as follows:
 ### Data conversion specification
 
 We defines the conversion specification between cells and Bytes on Func. It supports the conversion of buffers less than 1 MB in length into Func cells.
+
+![cell_bytes](./images/cell_bytes.jpg)
 
 **Rule**
 
