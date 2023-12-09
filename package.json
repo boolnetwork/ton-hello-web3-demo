@@ -4,6 +4,8 @@
     "scripts": {
         "start": "blueprint run",
         "build": "blueprint build",
+        "deploy": "ts-node ./scripts/deployHelloWeb3.ts",
+        "sent": "ts-node ./scripts/SendGreeting.ts",
         "fmt": "prettier --write .",
         "test": "jest --verbose"
     },
