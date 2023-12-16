@@ -5,7 +5,7 @@ import '@ton/test-utils';
 import { compile } from '@ton/blueprint';
 import { loadEnv } from './utils';
 
-async function deploy() {
+async function run() {
     // use .env params
     let envs = loadEnv();
     console.log(envs);
@@ -54,6 +54,7 @@ async function deploy() {
         dstChainId: dst_chain_id,
         message: messageData,
     });
+    console.log('sent greeting transaction');
     await waiting_for_confirm(seqno);
 
     async function waiting_for_confirm(seqno: number) {
@@ -66,7 +67,7 @@ async function deploy() {
     }
 }
 
-deploy();
+run();
 
 function sleep(ms: number) {
     return new Promise((resolve) => setTimeout(resolve, ms));

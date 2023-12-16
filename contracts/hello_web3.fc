@@ -5,7 +5,7 @@
 
 const int PURE_MESSAGE = 68038435685714835404746397473075527471200685952179818348883312067161876423550;
 
-const error:not_existed = "error::not_existed"c; ;; 0x83169731
+const error:not_existed = 201;
 
 const event:anchor_created = "anchor_created(int, cell)"c; ;; 3469c0b6
 
@@ -56,15 +56,6 @@ cell pack_send_greeting(int dst_chain_id, cell message) inline {
     cell message = ds~load_ref();
     ;;ds.end_parse();
     return (dst_chain_id, message);
-}
-
-cell pack_swap_payload(int tag, int amount, int address, cell payload) inline {
-    return begin_cell()
-    .store_uint(tag, 256)
-    .store_uint(amount, 256)
-    .store_uint(address, 256)
-    .store_ref(payload)
-    .end_cell();
 }
 
 cell align_data(cell message) inline {
@@ -154,7 +145,6 @@ cell pack_eth_payload(cell message, int sender) inline {
         (int workchain, int addr) = parse_std_addr(my_address_a);
         cell payload = pack_eth_payload(message, addr);
 
-        payload~dump();
         ;; call messenger
         cell cross_data = begin_cell()
         .store_slice(sender_address)
@@ -194,8 +184,6 @@ cell pack_eth_payload(cell message, int sender) inline {
             .store_ref(extra_feed)
             .end_cell();
 
-        message~dump();
-        sender~dump();
         ;; call back to messenger if sender_not_messenger
         ifnot (sender_address.equal_slices(ctx_messenger)) {
             call_back_delivered_status_to_messenger(sender_address, cross_data, 777, SEND_MODE_CARRY_ALL_REMAINING_MESSAGE_VALUE, 0, deliver_addr);
@@ -223,6 +211,7 @@ cell pack_eth_payload(cell message, int sender) inline {
         payload~dump();
         dst_chain~dump();
         exit_code~dump();
+        ;; TODO Process data returned from messenger callback
         return ();
     }
 

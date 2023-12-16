@@ -4,12 +4,12 @@ A simple demo for developing on Bool Network.
 
 ## Installation
 
-- Clone this repository
+-   Clone this repository
     ```sh
     git clone https://github.com/boolnetwork/ton-hello-web3-demo.git
     cd ton-hello-web3-demo
     ```
-- Add dependencies
+-   Add dependencies
     ```sh
     npm install
     ```
@@ -24,9 +24,9 @@ This article details the use of dynamic committees of Bool Network to implement 
 
 ### Prerequisites
 
-- Have the knowledge that the EVM series of [Solidity](https://docs.soliditylang.org/en/v0.8.23/) smart contract language basic syntax, including variables, data types, functions, events, etc., also need to be familiar with the development and deployment of smart contracts, as well as understand the related development tools and libraries, this tutorial uses the hardhat development framework.
-- Basic syntax and features, development and deployment, tools and libraries of Ton's smart contract development language [FunC](https://docs.ton.org/develop/func/overview) are required, and this tutorial uses the blueprint development framework.
-- You may to understand the operating principle of the bool [dynamic committee](https://boolnetwork.gitbook.io/docs/concepts/dynamic-hidden-committee-dhc).
+-   Have the knowledge that the EVM series of [Solidity](https://docs.soliditylang.org/en/v0.8.23/) smart contract language basic syntax, including variables, data types, functions, events, etc., also need to be familiar with the development and deployment of smart contracts, as well as understand the related development tools and libraries, this tutorial uses the hardhat development framework.
+-   Basic syntax and features, development and deployment, tools and libraries of Ton's smart contract development language [FunC](https://docs.ton.org/develop/func/overview) are required, and this tutorial uses the blueprint development framework.
+-   You may to understand the operating principle of the bool [dynamic committee](https://boolnetwork.gitbook.io/docs/concepts/dynamic-hidden-committee-dhc).
 
 FunC and solidity are two different smart contract languages, each with separate execution engines, resulting in huge differences in data types, structures, and function calls, which pose a huge challenge for cross-chain execution. In order to eliminate the influence of BOOL dynamic committee on data transmission of heterogeneous chains, we specify a set of [data conversion specification](#to_dcs) between TON-EVM. Be sure to read it carefully as it relates to your TON contract data parsing logic.
 
@@ -46,7 +46,6 @@ When you have completed the above configuration, the next steps are required on 
 2. Update the consumer address of the Anchor object in the Messenger contract.
 3. Update the Anchor address of the EVM target chain of the anchor object in the Messenger contract.
 4. Sends a "Hello World" message to the EVM target chain.
-
 
 The execution script of Steps 1 to 3:
 
@@ -81,12 +80,12 @@ begin_cell()
 .end_cell();
 ```
 
-- **sender_address**：The sender's address  
-- **PURE_MESSAGE**： A fixed constant type  
-- **extra_feed**：The additional data needed needs to be known by the EVM chain  
-- **dst_chain_id**： Destination EVM chain id  
-- **payload**：Execution data sent to the EVM chain  
-- **ctx_anchor**：The anchor address of the current chain  
+-   **sender_address**：The sender's address
+-   **PURE_MESSAGE**： A fixed constant type
+-   **extra_feed**：The additional data needed needs to be known by the EVM chain
+-   **dst_chain_id**： Destination EVM chain id
+-   **payload**：Execution data sent to the EVM chain
+-   **ctx_anchor**：The anchor address of the current chain
 
 ### **Receive class operations**
 
@@ -96,9 +95,9 @@ Note: Users need to interpret internal messages initiated by `Messenger` accordi
 
 TON's HelloWeb3 Key links is as follows:
 
-- [op::send_greeting](https://github.com/boolnetwork/ton-hello-web3-demo/blob/master/contracts/hello_web3.fc#L151)
-- [consumer::receive_message_from_messenger](https://github.com/boolnetwork/ton-hello-web3-demo/blob/master/contracts/hello_web3.fc#L176)
-- [consumer::send_message_result_from_messenger](https://github.com/boolnetwork/ton-hello-web3-demo/blob/master/contracts/hello_web3.fc#L216C15-L216C59)
+-   [op::send_greeting](https://github.com/boolnetwork/ton-hello-web3-demo/blob/master/contracts/hello_web3.fc#L151)
+-   [consumer::receive_message_from_messenger](https://github.com/boolnetwork/ton-hello-web3-demo/blob/master/contracts/hello_web3.fc#L176)
+-   [consumer::send_message_result_from_messenger](https://github.com/boolnetwork/ton-hello-web3-demo/blob/master/contracts/hello_web3.fc#L216C15-L216C59)
 
 <span id="to_dcs"></span>
 
@@ -110,7 +109,7 @@ We defines the conversion specification between cells and Bytes on Func. It supp
 
 **Rule**
 
-1. Each cell stores only 32 bytes of data. If the number is less than 32 bytes, add 0 to 32 bytes at the end. 
+1. Each cell stores only 32 bytes of data. If the number is less than 32 bytes, add 0 to 32 bytes at the end.
 2. After all four refs of a cell are filled with data, the remaining data is filled into the last ref of the current layer.
 
 **Usage scenario**

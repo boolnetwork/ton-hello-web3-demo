@@ -1,0 +1,361 @@
+#include "imports/stdlib.fc";
+#include "imports/params.fc";
+#include "imports/jetton-utils.fc";
+#include "utils.fc";
+
+#pragma version >=0.2.0;
+
+const int PURE_MESSAGE = 68038435685714835404746397473075527471200685952179818348883312067161876423550;
+
+const error::invalid_jetton_wallet = 201;
+const error::not_messenger = 202;
+const error::not_admin = 203;
+
+;; uid, amount, sender
+const event:bridge_out = "bridge_out(int, int, int)"c; ;; f3e3fb7d
+;; uid, amount, recipient
+const event:bridge_in = "bridge_in(int, int, int)"c; ;; c23cadb3
+
+const op::bridge_out = "op::bridge_out"c; ;; 0xaf2173b9
+const op::update_binding = "op::update_binding"c; ;;0x79441915
+
+;; storage variables
+global slice ctx_messenger;
+global int ctx_anchor;
+global slice ctx_admin;
+global cell ctx_binding;
+global cell ctx_jetton_wallet_code;
+
+global slice ctx_jetton_wallet; ;; jetton wallet address
+global slice ctx_jetton_master; ;; jetton master address
+global int ctx_is_locked_jetton;
+
+;;;;;;;;;;;;
+;; assistance functions
+;;;;;;;;;;;;
+() call_messenger_to_send_message(slice messenger, cell cross_data, int amount, int mode, int purpose, slice from_user) impure inline {
+    cell call_body = begin_cell()
+        .store_uint(messenger::send_message, 32)
+        .store_ref(cross_data)
+        .store_uint(purpose, 8)
+        .store_slice(from_user)
+        .end_cell();
+    send_message_with_mode(messenger, amount, call_body, mode);
+}
+
+() call_back_delivered_status_to_messenger(slice messenger, cell cross_data, int exit_code, int mode, int amount, slice deliver) impure {
+    cell data = begin_cell()
+            .store_ref(cross_data)
+            .store_uint(exit_code, 32)
+            .store_slice(deliver)
+            .end_cell();
+
+    cell call_body = begin_cell()
+        .store_uint(messenger::handle_message_result_from_consumer, 32)
+        .store_ref(data)
+        .end_cell();
+
+    send_message_with_mode(messenger, amount, call_body, mode);
+}
+
+cell create_jetton_mint_body(int query_id, int fwd_amount, int jetton_amount, slice owner, slice response_address) inline {
+    cell body = begin_cell()
+        .store_uint(21, 32)
+        .store_uint(query_id, 64)
+        .store_slice(owner)
+        .store_coins(fwd_amount)
+        .store_ref(begin_cell()
+            .store_uint(0x178d4519, 32) ;;internal_transfer
+            .store_uint(query_id, 64)
+            .store_coins(jetton_amount)
+            .store_slice(owner) ;; from_owner_address
+            .store_slice(response_address) ;; response_address
+            .store_coins(0) ;; forward_ton_amount
+            .store_uint(0, 1)
+            .end_cell())   
+        .end_cell();
+    return body;
+}
+
+cell create_jetton_burn_body(int query_id, int jetton_amount, slice response_address) inline {
+    cell body = begin_cell()
+        .store_uint(0x595f07bc, 32)
+        .store_uint(query_id, 64)
+        .store_coins(jetton_amount)
+        .store_slice(response_address)
+        .end_cell();
+    return body;
+}
+
+;;;;;;;;;;;;
+;; pack/unpack operation parameters
+;;;;;;;;;;;;
+cell pack_bridge_out_params(int dst_chain_id, int amount, int dst_recipient) inline {
+    return begin_cell()
+            .store_uint(dst_chain_id, 32)
+            .store_uint(dst_recipient, 256)
+            .end_cell();
+}
+
+(int, int) unpack_bridge_out_params(slice ds) inline {
+    ;;var ds = data.begin_parse();
+    int dst_chain_id = ds~load_uint(32);
+    int dst_recipient = ds~load_uint(256);
+    ds.end_parse();
+    return (dst_chain_id, dst_recipient);
+}
+
+cell pack_binding_params(slice jetton_master, int is_locked_jetton) inline {
+    return begin_cell()
+            .store_slice(jetton_master)
+            .store_uint(is_locked_jetton, 1)
+            .end_cell();
+}
+
+(slice, int) unpack_binding_params(cell data) inline {
+    slice ds = data.begin_parse();
+    slice jetton_master = ds~load_msg_addr();
+    int is_locked_jetton = ds~load_uint(1);
+    ds.end_parse();
+    return (jetton_master, is_locked_jetton);
+}
+
+;;;;;;;;;;;;
+;; encode/decode with ethereum abi type
+;;;;;;;;;;;;
+cell encode_eth_abi_payload(int amount, int recipient) inline {
+    return begin_cell()
+    .store_uint(amount, 256)
+    .store_ref(begin_cell().store_uint(recipient, 256).end_cell())
+    .end_cell();
+}
+
+(int, int) decode_eth_abi_payload(cell data) inline {
+    var ds = data.begin_parse();
+    int amount = ds~load_uint(256);
+    cell c_recipient = ds~load_ref();
+    ds.end_parse();
+
+    slice c_recipient_ds = c_recipient.begin_parse();
+    int address = c_recipient_ds~load_int(256);
+    return (amount, address);
+}
+
+;; load_data populates storage variables using stored data
+() load_data() impure inline {
+    var ds = get_data().begin_parse();
+
+    ctx_messenger = ds~load_msg_addr();
+    ctx_anchor = ds~load_uint(256);
+    ctx_admin = ds~load_msg_addr();
+    ctx_binding = ds~load_ref();
+    ctx_jetton_wallet_code = ds~load_ref();
+
+    ds.end_parse();
+
+    (slice jetton_master, int is_locked_jetton) = unpack_binding_params(ctx_binding);
+    ctx_jetton_wallet = calculate_user_jetton_wallet_address(my_address(), jetton_master, ctx_jetton_wallet_code);
+    ctx_jetton_master = jetton_master;
+    ctx_is_locked_jetton = is_locked_jetton;
+}
+
+;; save_data stores storage variables as a cell into persistent storage
+() save_data() impure inline {
+    ctx_binding = pack_binding_params(ctx_jetton_master, ctx_is_locked_jetton);
+    set_data(
+        begin_cell()
+            .store_slice(ctx_messenger)
+            .store_uint(ctx_anchor, 256)
+            .store_slice(ctx_admin)
+            .store_ref(ctx_binding)
+            .store_ref(ctx_jetton_wallet_code)
+            .end_cell()
+    );
+}
+
+;; recv_internal is the main function of the contract and is called when it receives a message from other contracts
+() recv_internal(int my_balance, int msg_value, cell in_msg_full, slice in_msg_body) impure {
+    if (in_msg_body.slice_empty?()) { ;; ignore all empty messages
+        return ();
+    }
+
+    slice cs = in_msg_full.begin_parse();
+    int flags = cs~load_uint(4);
+    if (flags & 1) { ;; ignore all bounced messages
+        return ();
+    }
+    slice caller_address = cs~load_msg_addr();
+    cs~load_msg_addr(); ;; skip dst
+    cs~load_coins(); ;; skip value
+    cs~skip_bits(1); ;; skip extracurrency collection
+    cs~load_coins(); ;; skip ihr_fee
+    int fwd_fee = cs~load_coins();
+
+    ;; here we populate the storage variables
+    load_data(); 
+
+    int op = in_msg_body~load_uint(32); ;; by convention, the first 32 bits of incoming message is the op
+    int query_id = in_msg_body~load_uint(64); ;; also by convention, the next 64 bits contain the "query id", although this is not always the case
+
+    if (op == op::update_binding) {
+        throw_unless(error::not_admin, caller_address.equal_slices(ctx_admin));
+        ctx_jetton_master = in_msg_body~load_msg_addr();
+        ctx_is_locked_jetton = in_msg_body~load_uint(1);
+        save_data();
+        return ();
+    }
+
+    if (op == consumer::receive_message_from_messenger) {
+        int uid = in_msg_body~load_uint(256);
+        cell cross_type = in_msg_body~load_ref();
+        int src_anchor = in_msg_body~load_uint(256);
+        int dst_anchor = in_msg_body~load_uint(256);
+        cell extra_feed = in_msg_body~load_ref();
+        cell payload = in_msg_body~load_ref();
+        cell deliver = in_msg_body~load_ref();
+        in_msg_body.end_parse();
+        slice deliver_cs = deliver.begin_parse();
+        slice deliver_addr = deliver_cs~load_msg_addr();
+
+        (int jetton_mint_amount, int jetton_receiver) = decode_eth_abi_payload(payload);
+        cell cross_data = begin_cell()
+            .store_uint(uid, 256)
+            .store_ref(cross_type)
+            .store_uint(src_anchor, 256)
+            .store_uint(dst_anchor, 256)
+            .store_ref(extra_feed)
+            .end_cell();
+
+
+        ;; call back to messenger if sender_not_messenger
+        ifnot (caller_address.equal_slices(ctx_messenger)) {
+            call_back_delivered_status_to_messenger(caller_address, cross_data, 777, SEND_MODE_CARRY_ALL_REMAINING_MESSAGE_VALUE, 0, deliver_addr);
+            return ();
+        }
+
+        ;; TODO emit event
+        ;; TODO check fee
+        
+        ;; call chain [jetton_minter -- jetton_wallet]
+        ;;            [                |--- messenger]
+        slice receiver = get_serialized_address(WORKCHAIN, jetton_receiver);
+        int fwd_amount = msg_value / 2;
+        var mint_body = create_jetton_mint_body(
+            query_id, 
+            fwd_amount / 2, 
+            jetton_mint_amount,
+            receiver,
+            deliver_addr
+        );
+
+        ;; call jetten_minter;
+        send_message_with_mode(ctx_jetton_master, fwd_amount, mint_body, SEND_MODE_REGULAR);
+
+        call_back_delivered_status_to_messenger(caller_address, cross_data, 0, SEND_MODE_REGULAR, fwd_amount, deliver_addr);
+        return ();
+    }
+
+    if (op == consumer::send_message_result_from_messenger) {
+        throw_unless(error::not_messenger, caller_address.equal_slices(ctx_messenger));
+
+        cell payload = in_msg_body~load_ref();
+        int dst_chain = in_msg_body~load_uint(32);
+        int indicator = in_msg_body~load_uint(8);
+        slice refund_address = in_msg_body~load_msg_addr();
+        slice from_user = in_msg_body~load_msg_addr();
+        int exit_code = in_msg_body~load_uint(32);
+        
+        (int amount, int recipient) = decode_eth_abi_payload(payload);
+
+        if (exit_code == 0) {
+            ;; call burn jetton
+            cell burn_body = create_jetton_burn_body(query_id, amount, from_user);
+            send_message_with_mode(ctx_jetton_wallet, 0, burn_body, SEND_MODE_CARRY_ALL_REMAINING_MESSAGE_VALUE);
+        } else {
+            ;; refund jetton
+            var transfer_body = create_jetton_transfer_body(query_id, 0, amount, from_user, from_user);
+            send_message_with_mode(ctx_jetton_wallet, 0, transfer_body.end_cell(), SEND_MODE_CARRY_ALL_REMAINING_MESSAGE_VALUE);
+        }
+        return ();
+    }
+
+    ;; call from pool's jetton wallet, means user has been transer some token to pool's jetton wallet.
+    if (op == op::transfer_notification()) {
+        int transfer_amount = in_msg_body~load_coins();
+        slice from_user = in_msg_body~load_msg_addr();
+        
+        cell ref_cs = in_msg_body~load_ref(); 
+        slice ref_ds = ref_cs.begin_parse();
+        int bridge_op = ref_ds~load_uint(32);
+        int query_id = ref_ds~load_uint(64);
+
+        ;; check notify sender
+        throw_unless(error::invalid_jetton_wallet, caller_address.equal_slices(ctx_jetton_wallet));
+
+        if (bridge_op == op::bridge_out) {
+            ;; TODO convert to common actual amount.
+            (int dst_chain_id, int dst_recipient) = unpack_bridge_out_params(ref_ds);
+            cell payload = encode_eth_abi_payload(transfer_amount, dst_recipient);
+
+            cell cross_data = begin_cell()
+                .store_slice(from_user)
+                .store_uint(PURE_MESSAGE, 256) ;; cross_type
+                .store_ref(begin_cell().end_cell()) ;; extra_feed
+                .store_uint(dst_chain_id, 32)
+                .store_ref(payload)
+                .store_uint(ctx_anchor, 256)
+                .end_cell();
+
+            ;; (log_fee + transfer_fee / burn_fee)
+            int burn_or_transfer_fw_value = (4 * fwd_fee + 4 * GAS_CONSUMPTION + JETTON_TRANSFER_FEE_CONSUMPTION) * 2;
+            
+            if (msg_value < burn_or_transfer_fw_value) {
+                ;; refund jetton
+                var transfer_body = create_jetton_transfer_body(query_id, 0, transfer_amount, from_user, from_user);
+                send_message_with_mode(ctx_jetton_wallet, 0, transfer_body.end_cell(), SEND_MODE_CARRY_ALL_REMAINING_MESSAGE_VALUE);
+                return ();
+            }
+            
+            ;; call send messenger
+            call_messenger_to_send_message(ctx_messenger, cross_data, 0, SEND_MODE_CARRY_ALL_REMAINING_MESSAGE_VALUE, 0, from_user);
+
+            ;; useless save data
+            ;;save_data();
+            return ();
+        }
+
+        return ();
+    }
+
+    throw(0xffff); ;; if the message contains an op that is not known to this contract, we throw
+}
+
+slice get_messenger() method_id {
+    load_data();
+    return ctx_messenger;
+}
+
+int get_anchor() method_id {
+    load_data();
+    return ctx_anchor;
+}
+
+slice get_admin() method_id {
+    load_data();
+    return ctx_admin;
+}
+
+slice get_jetton_wallet() method_id {
+    load_data();
+    return ctx_jetton_wallet;
+}
+
+slice get_jetton_master() method_id {
+    load_data();
+    return ctx_jetton_master;
+}
+
+int get_is_locked_jetton() method_id {
+    load_data();
+    return ctx_is_locked_jetton;
+}
