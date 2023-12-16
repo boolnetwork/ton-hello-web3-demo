@@ -11,7 +11,6 @@ async function deploy() {
     // use .env params
     let envs = loadEnv();
     console.log(envs);
-    const TON_COMMITTEE_PUBLIC_KEY = envs.TON_COMMITTEE_PUBLIC_KEY ?? '';
     const TON_ANCHOR_ADDRESS =
         envs.TON_ANCHOR_ADDRESS ?? '0x5edd3f25658e251e403ed18b90c417434138555e3545e0a6b9e4244f4cb0960c';
     const EVM_ANCHOR_ADDRESS = envs.EVM_ANCHOR_ADDRESS ?? '0x65fb860d54a5f175a68e09db5881f756e04ca657';
@@ -23,8 +22,6 @@ async function deploy() {
     const endpoint = envs.ENDPOINT;
     const client = new TonClient({ endpoint });
 
-    const cmtPk = BigInt(TON_COMMITTEE_PUBLIC_KEY);
-    console.log('cmtPk', cmtPk);
     // open wallet v4 (notice the correct wallet version here)
     const mnemonic = envs.WALLET_MNEMONIC ?? '';
     const key = await mnemonicToPrivateKey(mnemonic.split(' '));
@@ -125,7 +122,7 @@ async function deploy() {
         console.log('deploy jettonBridge confirmed!');
     }
 
-
+    // transfer owner
     if (info.adminAddress.equals(jettonBridge.address)) {
         console.log('the owner of Minter is jettonBridge');
     } else {
@@ -136,7 +133,7 @@ async function deploy() {
             newOwner: jettonBridge.address
         });
         await waiting_for_confirm(seqno);
-        console.log('deploy jettonBridge confirmed!');
+        console.log('transfer minter owner to jettonBridge confirmed!');
     }
 
     //// step2: update consumer

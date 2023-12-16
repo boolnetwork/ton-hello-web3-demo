@@ -1,4 +1,4 @@
-# Ton HelloWeb3 Demo
+# Ton Demo
 
 A simple demo for developing on Bool Network.
 
@@ -38,28 +38,55 @@ Building a set of TON-EVM heterogeneous chain bridge can be divided into the fol
 2. Deploy consumer contracts on the EVM chain and configure contracts
 3. Deploy consumer contracts on the TON chain and configure contracts
 
-For developers who are new to BOOL cross-chain, it is recommended to refer to [advanced solidity tutorials](https://github.com/boolnetwork/advanced-solidity-tutorials), which contains detailed instructions on the first and second aspects. We used the HelloWeb3 example.
+For developers who are new to BOOL cross-chain, it is recommended to refer to [advanced solidity tutorials](https://github.com/boolnetwork/advanced-solidity-tutorials), which contains detailed instructions on the first and second aspects.
 
 When you have completed the above configuration, the next steps are required on the TON chain:
 
-1. Deploy your contract, here we use the HelloWeb3 example.
-2. Update the consumer address of the Anchor object in the Messenger contract.
-3. Update the Anchor address of the EVM target chain of the anchor object in the Messenger contract.
-4. Sends a "Hello World" message to the EVM target chain.
+1. Go to [Minter](https://minter.ton.org/?testnet=true) to create your Jetton. Deploy an `eddsa` anchor to the bridge at BoolScan.
+2. Deploy your contract, here we use the `JettonBridge` example.
+3. Update the consumer address of the Anchor object in the Messenger contract.
+4. Update the Anchor address of the EVM target chain of the anchor object in the Messenger contract.
+5. Sends a Jetton to the EVM target chain.
+
+
+#### Example on Ton Side
+
+Update `.env`.
+
+```text
+TON_ANCHOR_ADDRESS="0x1853cedb5972c7dfc433825b1277409f71e5593560b2787a57669b9c854f5058"
+EVM_CHAIN_ID=421613
+EVM_ANCHOR_ADDRESS="0x79d1378132e6cab941ca46650bebee19574921d3"
+MESSENGER_ADDRESS='EQCsEJfDuKKEkWT7Gjf0rGjF8XkM3Ugb4zF7SIOlXbdJnVJk'
+JETTON_MINTER_ADDRESS='EQBG8HUCjiYG_HL3asFXbyfoJP5B7E7HDpcDAVqi5okw80eZ'
+```
 
 The execution script of Steps 1 to 3:
 
 ```shell
-npm run deploy
+npm run deployJettonBridge
 ```
 
-The execution script for Step 4:
+The execution script for Step 4: Burn jetton and receive them on Arbitrum Goerli 
 
 ```shell
-npm run sent
+npm run sentJetton
 ```
 
-### TON's consumer contract
+#### Example on EVM Side
+
+Configure the "remote anchors" to support ton testnet on evm side. `TON_TESTNET` chain id is `2591988700`;
+```shell
+yarn hardhat updateRemoteAnchor --anchor 0x79d1378132e6cab941ca46650bebee19574921d3 --id 2591988700 --remoteanchor 0x1853cedb5972c7dfc433825b1277409f71e5593560b2787a57669b9c854f5058 --network arbitrum_goerli
+```
+
+Deposit tokens on Arbitrum Goerli and mint them on ton testnet.
+>>> TODO: use `Address` class of ton library to Obtain the 32-byte TON address 
+```shell
+yarn hardhat tokenBridgeDeposit --amount 1000000000 --bridge 0x565D09b0cd1c8B7Ca4846c06cc9Ec4a92a01012d --id 2591988700 --network arbitrum_goerli
+```
+
+## TON's consumer contract
 
 A complete cross-chain process relies on inter-calls between the BOOL `Messenger` contract and the consumer contract on the TON chain, the consumer contract has at least two send and receive operations.
 
@@ -67,7 +94,7 @@ A complete cross-chain process relies on inter-calls between the BOOL `Messenger
 
 After the sending operation of the consumer contract completes the user-defined logic, the `Messenger` contract must be notified according to the specification, otherwise the BOOL system will not identify the transaction as a legitimate cross-chain transaction.
 
-The notification data to `Messenger`` must be assembled as follows:
+The notification data to `Messenger` must be assembled as follows:
 
 ```text
 begin_cell()

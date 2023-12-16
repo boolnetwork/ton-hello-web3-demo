@@ -4,8 +4,10 @@
     "scripts": {
         "start": "blueprint run",
         "build": "blueprint build",
-        "deploy": "ts-node ./scripts/deployHelloWeb3.ts",
-        "sent": "ts-node ./scripts/SendGreeting.ts",
+        "deployHello": "ts-node ./scripts/deployHelloWeb3.ts",
+        "deployJettonBridge": "ts-node ./scripts/deployJettonBridge.ts",
+        "sentGreeting": "ts-node ./scripts/SentGreeting.ts",
+        "sentJetton": "ts-node ./scripts/SentJetton.ts",
         "fmt": "prettier --write .",
         "test": "jest --verbose"
     },

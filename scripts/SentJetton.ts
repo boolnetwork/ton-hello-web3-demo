@@ -1,6 +1,5 @@
 import { mnemonicToPrivateKey } from '@ton/crypto';
 import { TonClient, WalletContractV4, Dictionary, toNano, beginCell, Address, Cell } from '@ton/ton';
-import { HelloWeb3 } from '../wrappers/HelloWeb3';
 import '@ton/test-utils';
 import { JETTON_WALLET_BOC_CODE, loadEnv } from './utils';
 import { JettonMinter } from '../wrappers/JettonMinter';
@@ -12,7 +11,6 @@ async function run() {
     // use .env params
     let envs = loadEnv();
     console.log(envs);
-    const TON_COMMITTEE_PUBLIC_KEY = envs.TON_COMMITTEE_PUBLIC_KEY ?? '';
     const TON_ANCHOR_ADDRESS =
         envs.TON_ANCHOR_ADDRESS ?? '0x5edd3f25658e251e403ed18b90c417434138555e3545e0a6b9e4244f4cb0960c';
     const EVM_CHAIN_ID = Number(envs.EVM_CHAIN_ID ?? 421613);
@@ -22,8 +20,6 @@ async function run() {
     const endpoint = envs.ENDPOINT;
     const client = new TonClient({ endpoint });
 
-    const cmtPk = BigInt(TON_COMMITTEE_PUBLIC_KEY);
-    console.log('cmtPk', cmtPk);
     // open wallet v4 (notice the correct wallet version here)
     const mnemonic = envs.WALLET_MNEMONIC ?? '';
     const key = await mnemonicToPrivateKey(mnemonic.split(' '));
@@ -75,16 +71,17 @@ async function run() {
     let dst_chain_id = EVM_CHAIN_ID;
     const seqno = await walletContract.getSeqno();
     // TODO: your actual jetton amount and receiver address of eth chain.
-    let jettonAmount = toNano('10');
-    let dst_anchor = BigInt("0x781ED35B167068c93dFAdAb41dfb680eDaca4E50");
+    let jettonAmount = '1000';
+    let recipient = "0x781ED35B167068c93dFAdAb41dfb680eDaca4E50";
+    console.log(`send ${jettonAmount} Jetton to ${dst_chain_id} chain with recipient:${recipient} `)
     await senderJettonWalletContract.sendJettonTransferToBridge(walletSender, {
         value: toNano('0.5'),
-        jetton_amount: jettonAmount,
+        jetton_amount: toNano(jettonAmount),
         to: jettonBridge.address,
         response_addr: jettonBridge.address,
         forward_ton_amount: toNano('0.1'),
         dst_chain: dst_chain_id,
-        recipient: dst_anchor,
+        recipient: BigInt(recipient),
         refund_address: wallet.address,
     })
     await waiting_for_confirm(seqno);
