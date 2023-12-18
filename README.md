@@ -61,13 +61,13 @@ MESSENGER_ADDRESS='EQCsEJfDuKKEkWT7Gjf0rGjF8XkM3Ugb4zF7SIOlXbdJnVJk'
 JETTON_MINTER_ADDRESS='EQBG8HUCjiYG_HL3asFXbyfoJP5B7E7HDpcDAVqi5okw80eZ'
 ```
 
-The execution script of Steps 1 to 3:
+The execution script of Steps 2 to 4:
 
 ```shell
 npm run deployJettonBridge
 ```
 
-The execution script for Step 4: Burn jetton and receive them on Arbitrum Goerli 
+The execution script for Step 5: Burn jetton and receive them on Arbitrum Goerli.
 
 ```shell
 npm run sentJetton
@@ -76,14 +76,17 @@ npm run sentJetton
 #### Example on EVM Side
 
 Configure the "remote anchors" to support ton testnet on evm side. `TON_TESTNET` chain id is `2591988700`;
+
 ```shell
 yarn hardhat updateRemoteAnchor --anchor 0x79d1378132e6cab941ca46650bebee19574921d3 --id 2591988700 --remoteanchor 0x1853cedb5972c7dfc433825b1277409f71e5593560b2787a57669b9c854f5058 --network arbitrum_goerli
 ```
 
 Deposit tokens on Arbitrum Goerli and mint them on ton testnet.
->>> TODO: use `Address` class of ton library to Obtain the 32-byte TON address 
+>>> use [ton address](https://ton.org/address/) tool to Obtain the 32-byte TON hash.
+>>> Example recipient of ton: 0QAFGo9ad9sSWX53afYH0TRSmJuQpbgs4pTHaWk2SeooT6e7, we will get 0x051a8f5a77db12597e7769f607d13452989b90a5b82ce294c769693649ea284f
+
 ```shell
-yarn hardhat tokenBridgeDeposit --amount 1000000000 --bridge 0x565D09b0cd1c8B7Ca4846c06cc9Ec4a92a01012d --id 2591988700 --network arbitrum_goerli
+yarn hardhat tokenBridgeDeposit --amount 1000000000 --bridge 0x565D09b0cd1c8B7Ca4846c06cc9Ec4a92a01012d --id 2591988700 --recipient 0x051a8f5a77db12597e7769f607d13452989b90a5b82ce294c769693649ea284f --network arbitrum_goerli
 ```
 
 ## TON's consumer contract
